@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analyseur FTTE - Version Debug</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .upload-area {
+            border: 2px dashed #007bff;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            margin: 20px 0;
+            background-color: #f8f9fa;
+            cursor: pointer;
+        }
+        .upload-area:hover {
+            background-color: #e9ecef;
+        }
+        .upload-area.dragover {
+            background-color: #007bff;
+            color: white;
+        }
+        #fileInput {
+            display: none;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 5px;
+            display: none;
+        }
+        .status.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .progress-container {
+            display: none;
+            margin: 20px 0;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: #007bff;
+            width: 0%;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+        .results-container {
+            display: none;
+            margin-top: 30px;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .btn-primary {
+            background-color: #007bff;
+            color: white;
+        }
+        .btn-success {
+            background-color: #28a745;
+            color: white;
+        }
+        .btn-warning {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        button:hover {
+            opacity: 0.9;
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #007bff;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        .stats {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #ddd;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 16px;
+        }
+        .tab.active {
+            border-bottom: 3px solid #007bff;
+            color: #007bff;
+            font-weight: bold;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .debug-log {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .pm-multiple {
+            background-color: #fff3cd;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            border: 1px solid #ffeaa7;
+        }
+        .cassette-rejected {
+            background-color: #f8d7da;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Analyseur FTTE - Version Debug</h1>
+        
+        <div class="upload-area" id="uploadArea">
+            <p>📁 Glissez-déposez votre fichier ZIP ici</p>
+            <p>ou</p>
+            <button class="btn-primary" onclick="document.getElementById('fileInput').click()">
+                Sélectionner un fichier
+            </button>
+            <input type="file" id="fileInput" accept=".zip">
+        </div>
+
+        <div class="status info" id="status"></div>
+        
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill">0%</div>
+            </div>
+        </div>
+
+        <div class="results-container" id="resultsContainer">
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('results')">📊 Résultats</button>
+                <button class="tab" onclick="switchTab('debug')">🐛 Debug</button>
+                <button class="tab" onclick="switchTab('stats')">📈 Statistiques</button>
+            </div>
+
+            <div id="results-tab" class="tab-content active">
+                <div class="button-group">
+                    <button class="btn-success" onclick="downloadCSV()">
+                        💾 Télécharger CSV
+                    </button>
+                    <button class="btn-primary" onclick="resetAnalysis()">
+                        🔄 Nouvelle analyse
+                    </button>
+                </div>
+                <div id="resultsTable"></div>
+            </div>
+
+            <div id="debug-tab" class="tab-content">
+                <h3>PM avec plusieurs cassettes</h3>
+                <div id="pmMultiple"></div>
+                
+                <h3>Cassettes rejetées</h3>
+                <div id="cassettesRejected"></div>
+                
+                <h3>Log détaillé</h3>
+                <div class="debug-log" id="debugLog"></div>
+            </div>
+
+            <div id="stats-tab" class="tab-content">
+                <div class="stats" id="statsContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script>
+        let globalResults = [];
+        let debugInfo = {
+            pmCassettes: {},
+            cassetteRejets: {},
+            stats: {}
+        };
+
+        // Configuration du drag & drop
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const status = document.getElementById('status');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressFill = document.getElementById('progressFill');
+        const resultsContainer = document.getElementById('resultsContainer');
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file && file.name.endsWith('.zip')) {
+                processFile(file);
+            } else {
+                showStatus('Veuillez sélectionner un fichier ZIP', 'error');
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                processFile(file);
+            }
+        });
+
+        function switchTab(tabName) {
+            // Mettre à jour les boutons
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Mettre à jour le contenu
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(tabName + '-tab').classList.add('active');
+        }
+
+        function showStatus(message, type = 'info') {
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.style.display = 'block';
+        }
+
+        function updateProgress(percent, message = '') {
+            progressContainer.style.display = 'block';
+            progressFill.style.width = percent + '%';
+            progressFill.textContent = percent + '%';
+            if (message) {
+                showStatus(message, 'info');
+            }
+        }
+
+        function addDebugLog(message) {
+            const debugLog = document.getElementById('debugLog');
+            debugLog.textContent += new Date().toISOString().substr(11, 8) + ' - ' + message + '\n';
+            debugLog.scrollTop = debugLog.scrollHeight;
+        }
+
+        async function processFile(file) {
+            showStatus('Chargement du fichier ZIP...', 'info');
+            updateProgress(0);
+            globalResults = [];
+            debugInfo = {
+                pmCassettes: {},
+                cassetteRejets: {},
+                stats: {
+                    totalPositions: 0,
+                    totalCassettesFTTE: 0,
+                    cassettesAvecPositions: 0,
+                    pmDistincts: 0,
+                    rejetsNoPE: 0,
+                    rejetsNoSite: 0,
+                    rejetsNoLocal: 0
+                }
+            };
+            
+            try {
+                const zip = await JSZip.loadAsync(file);
+                addDebugLog('Fichier ZIP chargé avec succès');
+                
+                // Vérifier les fichiers requis
+                const requiredFiles = [
+                    't_cassette.csv', 't_position.csv', 't_fibre.csv',
+                    't_cable.csv', 't_site.csv', 't_local.csv'
+                ];
+                
+                for (const fileName of requiredFiles) {
+                    if (!zip.file(fileName)) {
+                        throw new Error(`Fichier manquant: ${fileName}`);
+                    }
+                }
+                addDebugLog('Tous les fichiers requis sont présents');
+                
+                // Traiter les fichiers
+                updateProgress(10, 'Chargement des cassettes FTTE...');
+                const cassettes = await loadCassettes(zip);
+                debugInfo.stats.totalCassettesFTTE = cassettes.size;
+                addDebugLog(`${cassettes.size} cassettes FTTE trouvées`);
+                
+                updateProgress(25, 'Chargement des câbles...');
+                const cables = await loadCables(zip);
+                addDebugLog(`${Object.keys(cables).length} câbles chargés`);
+                
+                updateProgress(40, 'Indexation des fibres...');
+                const fibreToCable = await loadFibres(zip, cables);
+                addDebugLog(`${Object.keys(fibreToCable).length} fibres indexées`);
+                
+                updateProgress(55, 'Chargement des sites...');
+                const noeudToSite = await loadSites(zip);
+                
+                updateProgress(65, 'Chargement des locaux...');
+                const siteToLocal = await loadLocaux(zip);
+                
+                updateProgress(75, 'Traitement des positions...');
+                await processPositions(zip, cassettes, cables, fibreToCable, noeudToSite, siteToLocal);
+                
+                updateProgress(100, 'Analyse terminée!');
+                showStatus(`Analyse terminée! ${globalResults.length} connexions FTTE trouvées`, 'success');
+                
+                displayResults();
+                displayDebugInfo();
+                displayStats();
+                
+            } catch (error) {
+                console.error(error);
+                showStatus(`Erreur: ${error.message}`, 'error');
+                addDebugLog(`ERREUR: ${error.message}`);
+            }
+        }
+
+        async function loadCassettes(zip) {
+            const cassettes = new Set();
+            const content = await zip.file('t_cassette.csv').async('string');
+            const lines = content.split('\n');
+            const headers = parseCSV(lines[0]);
+            
+            const idxCode = headers.indexOf('cs_code');
+            const idxType = headers.indexOf('cs_type');
+            const idxBP = headers.indexOf('cs_bp_code');
+            
+            for (let i = 1; i < lines.length; i++) {
+                if (lines[i].trim()) {
+                    const values = parseCSV(lines[i]);
+                    if (values[idxType] === 'E' && !values[idxBP]?.trim()) {
+                        cassettes.add(values[idxCode]);
+                    }
+                }
+            }
+            
+            return cassettes;
+        }
+
+        async function loadCables(zip) {
+            const cables = {};
+            const content = await zip.file('t_cable.csv').async('string');
+            const lines = content.split('\n');
+            const headers = parseCSV(lines[0]);
+            
+            const indices = {
+                code: headers.indexOf('cb_code'),
+                type: headers.indexOf('cb_typelog'),
+                etiq: headers.indexOf('cb_etiquet'),
+                nd1: headers.indexOf('cb_nd1'),
+                nd2: headers.indexOf('cb_nd2')
+            };
+            
+            for (let i = 1; i < lines.length; i++) {
+                if (lines[i].trim()) {
+                    const values = parseCSV(lines[i]);
+                    let peNode = '';
+                    
+                    if (values[indices.nd1]?.startsWith('PE')) {
+                        peNode = values[indices.nd1];
+                    } else if (values[indices.nd2]?.startsWith('PE')) {
+                        peNode = values[indices.nd2];
+                    }
+                    
+                    cables[values[indices.code]] = {
+                        cb_typelog: values[indices.type],
+                        cb_etiquet: values[indices.etiq] || values[indices.code],
+                        cb_nd1: values[indices.nd1] || '',
+                        cb_nd2: values[indices.nd2] || '',
+                        pe_node: peNode
+                    };
+                }
+            }
+            
+            return cables;
+        }
+
+        async function loadFibres(zip, cables) {
+            const fibreToCable = {};
+            const content = await zip.file('t_fibre.csv').async('string');
+            const lines = content.split('\n');
+            const headers = parseCSV(lines[0]);
+            
+            const idxFo = headers.indexOf('fo_code');
+            const idxCb = headers.indexOf('fo_cb_code');
+            
+            let count = 0;
+            for (let i = 1; i < lines.length; i++) {
+                if (lines[i].trim()) {
+                    const values = parseCSV(lines[i]);
+                    if (cables[values[idxCb]]) {
+                        fibreToCable[values[idxFo]] = values[idxCb];
+                        count++;
+                        if (count % 100000 === 0) {
+                            updateProgress(40 + Math.floor(15 * i / lines.length), 
+                                        `Fibres indexées: ${count.toLocaleString()}`);
+                        }
+                    }
+                }
+            }
+            
+            return fibreToCable;
+        }
+
+        async function loadSites(zip) {
+            const noeudToSite = {};
+            const content = await zip.file('t_site.csv').async('string');
+            const lines = content.split('\n');
+            const headers = parseCSV(lines[0]);
+            
+            const idxNd = headers.indexOf('st_nd_code');
+            const idxSt = headers.indexOf('st_code');
+            
+            for (let i = 1; i < lines.length; i++) {
+                if (lines[i].trim()) {
+                    const values = parseCSV(lines[i]);
+                    if (values[idxNd] && values[idxSt]) {
+                        noeudToSite[values[idxNd]] = values[idxSt];
+                    }
+                }
+            }
+            
+            return noeudToSite;
+        }
+
+        async function loadLocaux(zip) {
+            const siteToLocal = {};
+            const content = await zip.file('t_local.csv').async('string');
+            const lines = content.split('\n');
+            const headers = parseCSV(lines[0]);
+            
+            const indices = {
+                type: headers.indexOf('lc_typelog'),
+                st: headers.indexOf('lc_st_code'),
+                code: headers.indexOf('lc_code'),
+                etiq: headers.indexOf('lc_etiquet')
+            };
+            
+            for (let i = 1; i < lines.length; i++) {
+                if (lines[i].trim()) {
+                    const values = parseCSV(lines[i]);
+                    if (values[indices.type] === 'SRO' && values[indices.st]) {
+                        siteToLocal[values[indices.st]] = {
+                            lc_code: values[indices.code],
+                            lc_etiquet: values[indices.etiq]
+                        };
+                    }
+                }
+            }
+            
+            return siteToLocal;
+        }
+
+        async function processPositions(zip, cassettes, cables, fibreToCable, noeudToSite, siteToLocal) {
+            const content = await zip.file('t_position.csv').async('string');
+            const lines = content.split('\n');
+            const headers = parseCSV(lines[0]);
+            
+            const indices = {
+                cs: headers.indexOf('ps_cs_code'),
+                ps1: headers.indexOf('ps_1'),
+                ps2: headers.indexOf('ps_2')
+            };
+            
+            for (let i = 1; i < lines.length; i++) {
+                if (lines[i].trim()) {
+                    debugInfo.stats.totalPositions++;
+                    const values = parseCSV(lines[i]);
+                    const cassetteCode = values[indices.cs];
+                    
+                    if (cassettes.has(cassetteCode)) {
+                        if (!debugInfo.cassetteRejets[cassetteCode]) {
+                            debugInfo.cassetteRejets[cassetteCode] = {
+                                count: 0,
+                                raisons: []
+                            };
+                        }
+                        debugInfo.cassetteRejets[cassetteCode].count++;
+                        
+                        const fibre1 = values[indices.ps1];
+                        const fibre2 = values[indices.ps2];
+                        
+                        if (!fibreToCable[fibre1] || !fibreToCable[fibre2]) {
+                            if (!fibreToCable[fibre1]) {
+                                debugInfo.cassetteRejets[cassetteCode].raisons.push(`Fibre1 ${fibre1} non trouvée`);
+                            }
+                            if (!fibreToCable[fibre2]) {
+                                debugInfo.cassetteRejets[cassetteCode].raisons.push(`Fibre2 ${fibre2} non trouvée`);
+                            }
+                            continue;
+                        }
+                        
+                        const cable1 = cables[fibreToCable[fibre1]];
+                        const cable2 = cables[fibreToCable[fibre2]];
+                        
+                        let cableTR, cableDI, fibreTR, fibreDI;
+                        
+                        if (cable1.cb_typelog === 'TR' && cable2.cb_typelog === 'DI') {
+                            cableTR = cable1;
+                            cableDI = cable2;
+                            fibreTR = fibre1;
+                            fibreDI = fibre2;
+                        } else if (cable1.cb_typelog === 'DI' && cable2.cb_typelog === 'TR') {
+                            cableTR = cable2;
+                            cableDI = cable1;
+                            fibreTR = fibre2;
+                            fibreDI = fibre1;
+                        } else {
+                            debugInfo.cassetteRejets[cassetteCode].raisons.push(
+                                `Pas TR-DI: ${cable1.cb_typelog}-${cable2.cb_typelog}`);
+                            continue;
+                        }
+                        
+                        const peNode = cableDI.pe_node;
+                        if (!peNode) {
+                            debugInfo.cassetteRejets[cassetteCode].raisons.push(
+                                `Pas de PE dans câble DI ${cableDI.cb_etiquet}`);
+                            debugInfo.stats.rejetsNoPE++;
+                            continue;
+                        }
+                        
+                        const site = noeudToSite[peNode];
+                        if (!site) {
+                            debugInfo.cassetteRejets[cassetteCode].raisons.push(
+                                `Site non trouvé pour PE ${peNode}`);
+                            debugInfo.stats.rejetsNoSite++;
+                            continue;
+                        }
+                        
+                        const local = siteToLocal[site];
+                        if (!local) {
+                            debugInfo.cassetteRejets[cassetteCode].raisons.push(
+                                `Local non trouvé pour site ${site}`);
+                            debugInfo.stats.rejetsNoLocal++;
+                            continue;
+                        }
+                        
+                        // Succès - tracer le PM
+                        const pmCode = local.lc_code;
+                        if (!debugInfo.pmCassettes[pmCode]) {
+                            debugInfo.pmCassettes[pmCode] = new Set();
+                        }
+                        debugInfo.pmCassettes[pmCode].add(cassetteCode);
+                        
+                        globalResults.push({
+                            'Cassette FTTE': cassetteCode,
+                            'Fibre Transport': fibreTR,
+                            'Cable Transport': cableTR.cb_etiquet,
+                            'Fibre Distribution': fibreDI,
+                            'Cable Distribution': cableDI.cb_etiquet,
+                            'Noeud PE': peNode,
+                            'Site': site,
+                            'Local PM': local.lc_code,
+                            'Etiquette PM': local.lc_etiquet
+                        });
+                        
+                        // Nettoyer les raisons de rejet puisque c'est un succès
+                        delete debugInfo.cassetteRejets[cassetteCode];
+                    }
+                }
+                
+                if (i % 50000 === 0) {
+                    updateProgress(75 + Math.floor(20 * i / lines.length), 
+                                  `Positions: ${i.toLocaleString()} / ${globalResults.length} résultats`);
+                }
+            }
+            
+            debugInfo.stats.cassettesAvecPositions = Object.keys(debugInfo.cassetteRejets).length + 
+                                                     globalResults.length;
+            debugInfo.stats.pmDistincts = Object.keys(debugInfo.pmCassettes).length;
+        }
+
+        function displayResults() {
+            const resultsTable = document.getElementById('resultsTable');
+            if (globalResults.length === 0) {
+                resultsTable.innerHTML = '<p>Aucun résultat trouvé</p>';
+                return;
+            }
+            
+            const headers = Object.keys(globalResults[0]);
+            let html = '<table><thead><tr>';
+            headers.forEach(h => html += `<th>${h}</th>`);
+            html += '</tr></thead><tbody>';
+            
+            // Limiter l'affichage à 100 lignes
+            const displayLimit = Math.min(100, globalResults.length);
+            for (let i = 0; i < displayLimit; i++) {
+                html += '<tr>';
+                headers.forEach(h => html += `<td>${globalResults[i][h]}</td>`);
+                html += '</tr>';
+            }
+            
+            html += '</tbody></table>';
+            if (globalResults.length > displayLimit) {
+                html += `<p><em>Affichage limité aux ${displayLimit} premiers résultats. 
+                         Téléchargez le CSV pour voir tous les ${globalResults.length} résultats.</em></p>`;
+            }
+            
+            resultsTable.innerHTML = html;
+            resultsContainer.style.display = 'block';
+        }
+
+        function displayDebugInfo() {
+            // PM avec plusieurs cassettes
+            const pmMultipleDiv = document.getElementById('pmMultiple');
+            let pmHtml = '';
+            let pmMultiCount = 0;
+            
+            for (const [pm, cassettes] of Object.entries(debugInfo.pmCassettes)) {
+                if (cassettes.size > 1) {
+                    pmMultiCount++;
+                    pmHtml += `<div class="pm-multiple">
+                        PM ${pm}: ${cassettes.size} cassettes - ${Array.from(cassettes).join(', ')}
+                    </div>`;
+                }
+            }
+            
+            if (pmMultiCount === 0) {
+                pmHtml = '<p>Aucun PM avec plusieurs cassettes trouvé</p>';
+            } else {
+                pmHtml = `<p>${pmMultiCount} PM avec plusieurs cassettes:</p>` + pmHtml;
+            }
+            pmMultipleDiv.innerHTML = pmHtml;
+            
+            // Cassettes rejetées
+            const rejectedDiv = document.getElementById('cassettesRejected');
+            let rejHtml = '';
+            let rejCount = 0;
+            
+            for (const [cassette, info] of Object.entries(debugInfo.cassetteRejets)) {
+                if (info.raisons.length > 0) {
+                    rejCount++;
+                    const uniqueRaisons = [...new Set(info.raisons)];
+                    rejHtml += `<div class="cassette-rejected">
+                        <strong>Cassette ${cassette}</strong> (vue ${info.count} fois):
+                        <ul>
+                            ${uniqueRaisons.map(r => `<li>${r}</li>`).join('')}
+                        </ul>
+                    </div>`;
+                }
+            }
+            
+            if (rejCount === 0) {
+                rejHtml = '<p>Aucune cassette rejetée</p>';
+            } else {
+                rejHtml = `<p>${rejCount} cassettes rejetées:</p>` + rejHtml;
+            }
+            rejectedDiv.innerHTML = rejHtml;
+        }
+
+        function displayStats() {
+            const statsDiv = document.getElementById('statsContent');
+            const stats = debugInfo.stats;
+            
+            statsDiv.innerHTML = `
+                <h3>📊 Statistiques de l'analyse</h3>
+                <table>
+                    <tr><td><strong>Total positions traitées:</strong></td><td>${stats.totalPositions.toLocaleString()}</td></tr>
+                    <tr><td><strong>Total cassettes FTTE:</strong></td><td>${stats.totalCassettesFTTE.toLocaleString()}</td></tr>
+                    <tr><td><strong>Cassettes avec positions:</strong></td><td>${stats.cassettesAvecPositions.toLocaleString()}</td></tr>
+                    <tr><td><strong>Connexions FTTE trouvées:</strong></td><td>${globalResults.length.toLocaleString()}</td></tr>
+                    <tr><td><strong>PM distincts trouvés:</strong></td><td>${stats.pmDistincts.toLocaleString()}</td></tr>
+                </table>
+                <h4>Raisons de rejet</h4>
+                <table>
+                    <tr><td><strong>Pas de nœud PE:</strong></td><td>${stats.rejetsNoPE.toLocaleString()}</td></tr>
+                    <tr><td><strong>Site non trouvé:</strong></td><td>${stats.rejetsNoSite.toLocaleString()}</td></tr>
+                    <tr><td><strong>Local non trouvé:</strong></td><td>${stats.rejetsNoLocal.toLocaleString()}</td></tr>
+                </table>
+            `;
+        }
+
+        function parseCSV(line) {
+            const delimiter = line.includes(';') ? ';' : ',';
+            return line.split(delimiter).map(v => v.trim().replace(/^"|"$/g, ''));
+        }
+
+        function downloadCSV() {
+            if (globalResults.length === 0) {
+                showStatus('Aucun résultat à télécharger', 'error');
+                return;
+            }
+            
+            const headers = Object.keys(globalResults[0]);
+            let csv = headers.join(';') + '\n';
+            
+            globalResults.forEach(row => {
+                csv += headers.map(h => row[h]).join(';') + '\n';
+            });
+            
+            const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `ftte_results_${new Date().toISOString().slice(0, 19).replace(/:/g, '')}.csv`;
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function resetAnalysis() {
+            globalResults = [];
+            debugInfo = {
+                pmCassettes: {},
+                cassetteRejets: {},
+                stats: {}
+            };
+            document.getElementById('fileInput').value = '';
+            document.getElementById('status').style.display = 'none';
+            document.getElementById('progressContainer').style.display = 'none';
+            document.getElementById('resultsContainer').style.display = 'none';
+            document.getElementById('debugLog').textContent = '';
+        }
+    </script>
+</body>
+</html>

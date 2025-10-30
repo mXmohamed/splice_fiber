@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.env
+
+# Résultats et fichiers temporaires
+ftte_results_*.csv
+ftte_debug_*.csv
+ftte_rejets_*.txt
+extracted_files/
+*.zip
+
+# Excel/VBA
+*.xlsm
+*.xls
+~$*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

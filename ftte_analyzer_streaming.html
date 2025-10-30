@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analyseur FTTE - Version Streaming pour grandes données</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            background-color: #fafafa;
+            transition: all 0.3s ease;
+        }
+        .upload-area:hover {
+            border-color: #4CAF50;
+            background-color: #f0f8f0;
+        }
+        .upload-area.dragover {
+            border-color: #4CAF50;
+            background-color: #e8f5e9;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .upload-button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        .upload-button:hover {
+            background-color: #45a049;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+        .status.info {
+            background-color: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            color: #1565C0;
+        }
+        .status.success {
+            background-color: #e8f5e9;
+            border-left: 4px solid #4CAF50;
+            color: #2E7D32;
+        }
+        .status.error {
+            background-color: #ffebee;
+            border-left: 4px solid #f44336;
+            color: #c62828;
+        }
+        .status.warning {
+            background-color: #fff3e0;
+            border-left: 4px solid #ff9800;
+            color: #e65100;
+        }
+        .results {
+            margin-top: 30px;
+            display: none;
+        }
+        .results h2 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .summary {
+            background-color: #e8f5e9;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .summary h3 {
+            margin-top: 0;
+            color: #2E7D32;
+        }
+        .progress {
+            display: none;
+            margin-top: 20px;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: #4CAF50;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+        .progress-text {
+            text-align: center;
+            margin-top: 10px;
+            color: #666;
+        }
+        .memory-warning {
+            background-color: #fff3e0;
+            border: 2px solid #ff9800;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .memory-warning h4 {
+            color: #e65100;
+            margin-top: 0;
+        }
+        .results-preview {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            margin-top: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
+            position: sticky;
+            top: 0;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .export-button {
+            background-color: #2196F3;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+        .export-button:hover {
+            background-color: #1976D2;
+        }
+        .performance-info {
+            background-color: #e3f2fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-size: 14px;
+            color: #1565C0;
+        }
+        .chunk-info {
+            font-size: 12px;
+            color: #666;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Analyseur FTTE - Version Streaming (Grandes Données)</h1>
+        
+        <div class="memory-warning" id="memoryWarning">
+            <h4>⚠️ Mode Streaming Activé</h4>
+            <p>Cette version traite les données par chunks pour éviter les problèmes de mémoire.</p>
+            <p>Les résultats sont sauvegardés directement dans un fichier CSV téléchargeable.</p>
+        </div>
+        
+        <div class="upload-area" id="uploadArea">
+            <input type="file" id="fileInput" accept=".zip">
+            <p style="font-size: 18px; margin-bottom: 20px;">
+                <strong>Glissez-déposez votre fichier ZIP ici</strong>
+            </p>
+            <p style="color: #666; margin-bottom: 20px;">ou</p>
+            <button class="upload-button" onclick="document.getElementById('fileInput').click()">
+                Sélectionner un fichier ZIP
+            </button>
+        </div>
+
+        <div class="progress" id="progress">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-text" id="progressText">Traitement en cours...</div>
+            <div class="chunk-info" id="chunkInfo"></div>
+        </div>
+
+        <div class="status" id="status"></div>
+        
+        <div class="performance-info" id="performanceInfo" style="display: none;"></div>
+
+        <div class="results" id="results">
+            <h2>Résultats de l'analyse FTTE</h2>
+            
+            <div class="summary" id="summary"></div>
+            
+            <h3>Aperçu des résultats (100 premières lignes)</h3>
+            <div class="results-preview">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Cassette FTTE</th>
+                            <th>Fibre Transport</th>
+                            <th>Câble Transport</th>
+                            <th>Fibre Distribution</th>
+                            <th>Câble Distribution</th>
+                            <th>Baie</th>
+                            <th>Local PM</th>
+                            <th>Étiquette PM</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsBody">
+                    </tbody>
+                </table>
+            </div>
+            
+            <button class="export-button" id="downloadButton" style="display: none;">
+                Télécharger tous les résultats (CSV)
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let startTime = null;
+        let csvBlob = null;
+        let totalResults = 0;
+        let previewResults = [];
+        const CHUNK_SIZE = 10000; // Traiter 10k lignes à la fois
+        const PREVIEW_SIZE = 100; // Montrer seulement 100 lignes
+
+        // Configuration du drag & drop
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0 && files[0].name.endsWith('.zip')) {
+                handleFile(files[0]);
+            } else {
+                showStatus('Veuillez sélectionner un fichier ZIP valide', 'error');
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        function showStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.style.display = 'block';
+        }
+
+        function updateProgress(percent, text) {
+            document.getElementById('progress').style.display = 'block';
+            document.getElementById('progressFill').style.width = percent + '%';
+            document.getElementById('progressText').textContent = text;
+        }
+
+        function showChunkInfo(info) {
+            document.getElementById('chunkInfo').textContent = info;
+        }
+
+        async function handleFile(file) {
+            startTime = Date.now();
+            totalResults = 0;
+            previewResults = [];
+            
+            showStatus('Ouverture du fichier ZIP...', 'info');
+            updateProgress(5, 'Lecture du ZIP...');
+
+            try {
+                const zip = await JSZip.loadAsync(file);
+                
+                // Vérifier les fichiers nécessaires
+                const requiredFiles = [
+                    't_cassette.csv',
+                    't_position.csv',
+                    't_fibre.csv',
+                    't_cable.csv',
+                    't_baie.csv',
+                    't_local.csv'
+                ];
+
+                for (const fileName of requiredFiles) {
+                    if (!zip.file(fileName)) {
+                        throw new Error(`Fichier manquant: ${fileName}`);
+                    }
+                }
+
+                updateProgress(10, 'Chargement des données de référence...');
+
+                // 1. Charger d'abord les petites tables de référence
+                const cassettes = await loadAndParse(zip, 't_cassette.csv');
+                const baies = await loadAndParse(zip, 't_baie.csv');
+                const locaux = await loadAndParse(zip, 't_local.csv');
+                const cables = await loadAndParse(zip, 't_cable.csv');
+
+                // Filtrer les cassettes FTTE
+                const cassettesFTTE = cassettes.filter(c => 
+                    c.cs_type === 'E' && (!c.cs_bp_code || c.cs_bp_code.trim() === '')
+                );
+
+                if (cassettesFTTE.length === 0) {
+                    showStatus('Aucune cassette FTTE trouvée', 'error');
+                    return;
+                }
+
+                // Créer des index
+                const cassetteSet = new Set(cassettesFTTE.map(c => c.cs_code));
+                const cableMap = new Map(cables.map(c => [c.cb_code, c]));
+                const baieMap = new Map(baies.map(b => [b.ba_code, b]));
+                const localMap = new Map(locaux.map(l => [l.lc_code, l]));
+
+                updateProgress(20, 'Création des index...');
+
+                // 2. Charger les fibres par chunks et créer un index
+                const fibreIndex = await loadFibresInChunks(zip, cableMap);
+
+                updateProgress(40, 'Traitement des positions...');
+
+                // 3. Traiter les positions en streaming
+                await processPositionsStreaming(
+                    zip, 
+                    cassetteSet, 
+                    fibreIndex, 
+                    cableMap, 
+                    baieMap, 
+                    localMap
+                );
+
+                // Afficher les résultats
+                displayResults();
+
+                const endTime = Date.now();
+                const processingTime = ((endTime - startTime) / 1000).toFixed(2);
+                
+                showPerformanceInfo({
+                    time: processingTime,
+                    totalResults: totalResults
+                });
+
+            } catch (error) {
+                console.error('Erreur:', error);
+                showStatus(`Erreur: ${error.message}`, 'error');
+                document.getElementById('progress').style.display = 'none';
+            }
+        }
+
+        async function loadAndParse(zip, fileName) {
+            const content = await zip.file(fileName).async('string');
+            const parsed = Papa.parse(content, {
+                header: true,
+                skipEmptyLines: true,
+                delimiter: ';'
+            });
+            return parsed.data;
+        }
+
+        async function loadFibresInChunks(zip, cableMap) {
+            const fibreContent = await zip.file('t_fibre.csv').async('string');
+            const fibreIndex = new Map();
+            
+            // Parser les fibres par chunks pour économiser la mémoire
+            return new Promise((resolve) => {
+                let rowCount = 0;
+                
+                Papa.parse(fibreContent, {
+                    header: true,
+                    delimiter: ';',
+                    chunk: function(results) {
+                        results.data.forEach(fibre => {
+                            if (fibre.fo_code && fibre.fo_cb_code) {
+                                const cable = cableMap.get(fibre.fo_cb_code);
+                                if (cable) {
+                                    // Stocker seulement les infos essentielles
+                                    fibreIndex.set(fibre.fo_code, {
+                                        fo_code: fibre.fo_code,
+                                        fo_cb_code: fibre.fo_cb_code,
+                                        cb_typelog: cable.cb_typelog,
+                                        cb_etiquet: cable.cb_etiquet || cable.cb_code,
+                                        cb_ba1: cable.cb_ba1,
+                                        cb_ba2: cable.cb_ba2
+                                    });
+                                }
+                            }
+                        });
+                        rowCount += results.data.length;
+                        if (rowCount % 50000 === 0) {
+                            updateProgress(20 + (rowCount / 1000000) * 10, 
+                                `Indexation des fibres: ${(rowCount / 1000).toFixed(0)}k...`);
+                        }
+                    },
+                    complete: function() {
+                        console.log(`Index des fibres créé: ${fibreIndex.size} fibres`);
+                        resolve(fibreIndex);
+                    }
+                });
+            });
+        }
+
+        async function processPositionsStreaming(zip, cassetteSet, fibreIndex, cableMap, baieMap, localMap) {
+            const positionContent = await zip.file('t_position.csv').async('string');
+            
+            // Créer le CSV de sortie
+            const csvParts = [];
+            const headers = [
+                'Cassette FTTE',
+                'Fibre Transport',
+                'Cable Transport',
+                'Fibre Distribution',
+                'Cable Distribution',
+                'Baie',
+                'Local PM',
+                'Etiquette PM'
+            ];
+            csvParts.push(headers.join(';'));
+
+            return new Promise((resolve) => {
+                let processedPositions = 0;
+                let chunkNumber = 0;
+
+                Papa.parse(positionContent, {
+                    header: true,
+                    delimiter: ';',
+                    chunkSize: 1024 * 1024 * 5, // 5MB chunks
+                    chunk: function(results) {
+                        chunkNumber++;
+                        const chunkResults = [];
+                        
+                        results.data.forEach(position => {
+                            // Vérifier si c'est une cassette FTTE
+                            if (!cassetteSet.has(position.ps_cs_code)) return;
+
+                            // Récupérer les fibres depuis l'index
+                            const fibre1 = fibreIndex.get(position.ps_1);
+                            const fibre2 = fibreIndex.get(position.ps_2);
+
+                            if (!fibre1 || !fibre2) return;
+
+                            // Identifier TR et DI
+                            let fibreTransport, fibreDistribution;
+                            
+                            if (fibre1.cb_typelog === 'TR' && fibre2.cb_typelog === 'DI') {
+                                fibreTransport = fibre1;
+                                fibreDistribution = fibre2;
+                            } else if (fibre1.cb_typelog === 'DI' && fibre2.cb_typelog === 'TR') {
+                                fibreTransport = fibre2;
+                                fibreDistribution = fibre1;
+                            } else {
+                                return;
+                            }
+
+                            // Récupérer la baie
+                            const baieCode = fibreTransport.cb_ba1 || fibreTransport.cb_ba2;
+                            if (!baieCode) return;
+
+                            const baie = baieMap.get(baieCode);
+                            if (!baie) return;
+
+                            // Récupérer le local
+                            const local = localMap.get(baie.ba_lc_code);
+                            if (!local || local.lc_typelog !== 'SRO') return;
+
+                            const result = {
+                                cassette: position.ps_cs_code,
+                                fibreTransport: fibreTransport.fo_code,
+                                cableTransport: fibreTransport.cb_etiquet,
+                                fibreDistribution: fibreDistribution.fo_code,
+                                cableDistribution: fibreDistribution.cb_etiquet,
+                                baie: baie.ba_code,
+                                localPM: local.lc_code,
+                                etiquettePM: local.lc_etiquet
+                            };
+
+                            chunkResults.push(result);
+                            totalResults++;
+
+                            // Garder les 100 premiers pour l'aperçu
+                            if (previewResults.length < PREVIEW_SIZE) {
+                                previewResults.push(result);
+                            }
+                        });
+
+                        // Ajouter au CSV
+                        chunkResults.forEach(result => {
+                            csvParts.push([
+                                result.cassette,
+                                result.fibreTransport,
+                                result.cableTransport,
+                                result.fibreDistribution,
+                                result.cableDistribution,
+                                result.baie,
+                                result.localPM,
+                                result.etiquettePM
+                            ].join(';'));
+                        });
+
+                        processedPositions += results.data.length;
+                        updateProgress(40 + (chunkNumber * 5), 
+                            `Traitement des positions: ${(processedPositions / 1000).toFixed(0)}k lignes...`);
+                        showChunkInfo(`Chunk ${chunkNumber} traité - ${totalResults} résultats trouvés`);
+                    },
+                    complete: function() {
+                        // Créer le blob CSV final
+                        csvBlob = new Blob([csvParts.join('\n')], { type: 'text/csv;charset=utf-8;' });
+                        console.log(`Traitement terminé: ${totalResults} résultats`);
+                        updateProgress(100, 'Analyse terminée !');
+                        resolve();
+                    },
+                    error: function(error) {
+                        console.error('Erreur de parsing:', error);
+                    }
+                });
+            });
+        }
+
+        function displayResults() {
+            if (totalResults === 0) {
+                showStatus('Aucune fibre FTTE trouvée', 'error');
+                return;
+            }
+
+            showStatus(`${totalResults} connexions FTTE trouvées`, 'success');
+            
+            // Afficher le mode streaming
+            document.getElementById('memoryWarning').style.display = 'block';
+
+            // Afficher le résumé
+            const uniquePMs = [...new Set(previewResults.map(r => r.etiquettePM))];
+            const uniqueCassettes = [...new Set(previewResults.map(r => r.cassette))];
+            
+            document.getElementById('summary').innerHTML = `
+                <h3>Résumé de l'analyse</h3>
+                <p><strong>${totalResults}</strong> connexions FTTE identifiées</p>
+                <p><strong>${uniqueCassettes.length}+</strong> cassettes FTTE (aperçu)</p>
+                <p><strong>PM/SRO:</strong> ${uniquePMs.slice(0, 5).join(', ')}${uniquePMs.length > 5 ? '...' : ''}</p>
+            `;
+
+            // Remplir l'aperçu du tableau
+            const tbody = document.getElementById('resultsBody');
+            tbody.innerHTML = '';
+            
+            previewResults.forEach(result => {
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td>${result.cassette}</td>
+                    <td>${result.fibreTransport}</td>
+                    <td>${result.cableTransport}</td>
+                    <td>${result.fibreDistribution}</td>
+                    <td>${result.cableDistribution}</td>
+                    <td>${result.baie}</td>
+                    <td>${result.localPM}</td>
+                    <td><strong>${result.etiquettePM}</strong></td>
+                `;
+            });
+
+            // Configurer le bouton de téléchargement
+            const downloadButton = document.getElementById('downloadButton');
+            downloadButton.style.display = 'block';
+            downloadButton.onclick = downloadResults;
+
+            // Afficher les résultats
+            document.getElementById('results').style.display = 'block';
+            document.getElementById('progress').style.display = 'none';
+        }
+
+        function downloadResults() {
+            if (!csvBlob) {
+                alert('Aucun résultat à télécharger');
+                return;
+            }
+
+            const url = URL.createObjectURL(csvBlob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', `fibres_ftte_analyse_${totalResults}_lignes.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        function showPerformanceInfo(info) {
+            const perfDiv = document.getElementById('performanceInfo');
+            perfDiv.innerHTML = `
+                <strong>Performances:</strong> 
+                Temps de traitement: ${info.time}s | 
+                Résultats trouvés: ${info.totalResults.toLocaleString()} | 
+                Mode: Streaming (économie mémoire)
+            `;
+            perfDiv.style.display = 'block';
+        }
+
+        // Libérer la mémoire quand on quitte la page
+        window.addEventListener('beforeunload', () => {
+            if (csvBlob) {
+                URL.revokeObjectURL(csvBlob);
+            }
+        });
+    </script>
+</body>
+</html>
